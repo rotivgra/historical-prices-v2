@@ -1,6 +1,9 @@
 import mysql.connector
 import tkinter as tk
 from tkinter import ttk
+import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import (FigureCanvasTkAgg, NavigationToolbar2Tk)
 
 class App(tk.Tk):
     def __init__(self, db):
@@ -8,24 +11,14 @@ class App(tk.Tk):
         self.db = db
         self.frame_product()
 
-    """
-    frame_product: Utiliza o mysql.connector para se conectar ao BD FLUTUACOES e retornar consultas de todos os dados cadastrados!
-                   cursor.execute recebe uma string com uma sintax SQL tornado possivel que seja feitas diversas consultas diferentes no BD,
-                   sendo necessário apenas alterar a sintax  dentro da Tupla para retornar o resultado desejado!
-                   A variavel que recebe cursor.fetchall() salva o resultado de cursor.execute,
-                   essa variavel que recebeu cursor.fetchall() possui uma lista contendo tuplas com o ID e o Código de tudo cadastrado na Tabela PRODUTOS!
-
-                   Para apresentar esses dados utilizo a Widget ttk.Treeview, apenas configurando o cabeçalho e a quantidade de colunas!
-                   Feito as configurações necessárias eu faço um laço for, para inserir os dados salvos na variavel que recebeu cursor.fetchall(),
-                   na Widget ttk.Treeview através do comando self.trv_pro.insert.
-
-    consult_product: Permite filtrar a consulta por código através do LIKE no MySQL
-    """
-    
     def frame_product(self):
+        # FRAME consult
+        self.frame_consult = tk.LabelFrame(self, text="CONSULT PRODUCTS: ")
+        self.frame_consult.place(x=10, y=5, height=50, width=1000)
+
         # ENTRY consult
-        self.entry_product = tk.Entry(self, width=32)
-        self.entry_product.place(x=10, y=10)
+        self.entry_product = tk.Entry(self.frame_consult, width=32)
+        self.entry_product.grid(row=0,column=0, padx=10)
         
         # SELECT products
         select_product = "SELECT * FROM produtos ORDER BY codigo DESC;"
@@ -42,11 +35,11 @@ class App(tk.Tk):
         self.trv_pro["columns"] = ("1",)
         self.trv_pro["show"] = "headings"
         self.trv_pro.column("1", width = 190, anchor ="c")
-        self.trv_pro.heading("1", text ="Codigo")
+        self.trv_pro.heading("1", text ="CODIGO")
         for id_counter, list_product in enumerate(table_product):
             self.trv_pro.insert("","end", text=str(id_counter), values=(list_product[1]))
 
-        def consult_product():
+        def consult_product():            
             # SELECT consult DB
             store_product = self.entry_product.get()                 
             select_consult = f"SELECT * FROM produtos WHERE codigo LIKE '%{store_product}%';"
@@ -69,30 +62,10 @@ class App(tk.Tk):
                 self.entry_product.delete(0, 'end')
 
         # BUTTON consult
-        self.button_consult = tk.Button(self, text="CONSULTAR", command=consult_product)
-        self.button_consult.place(x=230, y=10)
+        self.button_consult = tk.Button(self.frame_consult, text="CONSULT", command=consult_product)
+        self.button_consult.grid(row=0,column=1, padx=10)
             
-    """
-    id_per_click: Recebe um evento da função frame_product que é utilizado para capturar o ID de cada interação do usuario,
-                  na Widget self.trv_pro através do metodo self.trv_pro.bind
-                  O ID do produto capturada através de uma consulta no BD que utiliza o evento de interação do usuario por mouse ou teclado,
-                  é salvo na variavel ref_id!
-
-                  Atraves da variavel ref_id é possivel fazer diversas consultas no BD usando-a como parametro, como exemplo verifique a variavel select_his,
-                  Para cada troca de linha feita no Widget self.trv_pro, o algoritimo faz a consulta, verifique a variavel select_his,
-                  esta consulta é salva em result_historic e apresentada em self.trv_his!
-
-                  É necessário apresentar ao usuario a média dos valores armazenado na Coluna PRECOEURO do BD FLUTUACOES, para isso verifique a variavel select_med,
-                  o resultado desta consulta é apresentada em self.trv_med.
-
-    ERROS/ EXEÇÕES: id_per_click: Essa função possui um laço de repetição que consulta no BD o histórico de preços referente a um ID selecionado pelo úsuario,
-                                  porém nem todos os produtos cadastrados possuem histórico de preço nesse caso o sistema apresenta um erro pois não encontra,
-                                  histórico para o Produto que o usuario selecionou!
-
-                                  Para tratar esse erro é criada a uma exceção tk.TclError:
-                                  Ela printa no console uma mensagem para que o usuario esteja ciente que determinado ID não possui histórico no BD
-                  
-    """
+   
     def id_per_click(self, event):
         # GET code at Widget
         self.curItem = self.trv_pro.focus()
@@ -150,6 +123,28 @@ class App(tk.Tk):
                 self.trv_med.insert("", "end", text=str(id_counter_v2), values=(media[1]))
             except tk.TclError:
                 print("Não possui histórico")
+
+        # SELECT date
+        select_horizontal = f"SELECT eu.data FROM precoeuro AS eu WHERE eu.id_produtos=%(eu.id_produtos)s ORDER BY eu.data ASC;"
+        all_date = self.db.cursor()
+        all_date.execute(select_horizontal, {"eu.id_produtos": ref_id})
+        result_date = all_date.fetchall()
+        all_date.close()
+
+        # SELECT prices
+        select_vertical = f"SELECT eu.preco FROM precoeuro AS eu WHERE eu.id_produtos=%(eu.id_produtos)s ORDER BY eu.data ASC;"
+        all_prices = self.db.cursor()
+        all_prices.execute(select_vertical, {"eu.id_produtos": ref_id})
+        result_prices = all_prices.fetchall()
+        all_prices.close()
+
+        # GRAPHIC historical prices
+        fig = plt.figure(figsize=(19, 7), dpi = 50)
+        plt.plot(result_date, result_prices, 'k--')
+        plt.plot(result_date, result_prices, 'go')
+        canvas = FigureCanvasTkAgg(fig, master = self)   
+        canvas.draw() 
+        canvas.get_tk_widget().place(x=35, y=300)  
 
 if __name__ == "__main__":
     db_connection = mysql.connector.connect(host="localhost", user="root", password="root", database="flutuacoes")
